@@ -1,0 +1,119 @@
+# Operaciones de ejemplo para Apollo Sandbox (http://localhost:4000/graphql)
+
+# 1. Vista condensada del catálogo (sin over-fetching)
+query CatalogCards {
+  medications(filter: { search: "acetaminofen" }, first: 5) {
+    totalCount
+    edges {
+      node {
+        id
+        commercialName
+        presentation
+        price
+      }
+    }
+  }
+}
+
+# 2. Relaciones anidadas resueltas por DataLoader (ver logs "LOADER")
+query CatalogWithRelations {
+  medications(first: 20, sort: { field: PRICE, direction: DESC }) {
+    edges {
+      node {
+        commercialName
+        laboratory { name country }
+        category { name }
+      }
+    }
+  }
+  laboratories {
+    name
+    medications(first: 3) { commercialName }
+  }
+}
+
+# 3. Ficha técnica
+query MedicationDetail($id: ID!) {
+  medication(id: $id) {
+    commercialName
+    activeIngredient
+    concentration
+    requiresPrescription
+    availability
+    laboratory { name }
+    category { name }
+    clinicalInfo { indications contraindications }
+  }
+}
+
+# 4. Comandos del carrito
+mutation CreateCart {
+  createCart {
+    cart { id }
+    errors { code message }
+  }
+}
+
+mutation AddItem($cartId: ID!, $medicationId: ID!) {
+  addItemToCart(input: { cartId: $cartId, medicationId: $medicationId, quantity: 2 }) {
+    cart { itemCount subtotal requiresPrescription items { quantity lineTotal medication { commercialName } } }
+    errors {
+      __typename
+      code
+      message
+      ... on InsufficientStockError { requested available }
+    }
+  }
+}
+
+# 5. Comando central
+mutation PlaceOrder($cartId: ID!) {
+  placeOrder(
+    input: {
+      cartId: $cartId
+      customer: { fullName: "Ana Pérez", email: "ana@example.com" }
+      prescription: {
+        number: "RX-2026-001"
+        doctorName: "Dr. Juan Gómez"
+        doctorLicense: "RM-45821"
+        patientDocument: "1020304050"
+        issuedAt: "2026-09-20"
+      }
+    }
+  ) {
+    receipt { orderId status total eventVersion }
+    errors {
+      __typename
+      code
+      message
+      path
+      ... on PrescriptionRequiredError { medications { commercialName } }
+      ... on InsufficientStockError { medication { commercialName } requested available }
+    }
+  }
+}
+
+# 6. Proyección de la orden
+query Order($id: ID!) {
+  order(id: $id) {
+    status
+    total
+    prescriptionStatus
+    projectionVersion
+    items { commercialName quantity unitPrice subtotal }
+    timeline { status note occurredAt }
+  }
+}
+
+# 7. Tiempo real
+subscription OrderUpdated($id: ID!) {
+  orderUpdated(orderId: $id) { status statusReason projectionVersion }
+}
+
+# 8. Panel de la farmacia
+mutation Dispatch($id: ID!) {
+  dispatchOrder(input: { orderId: $id, carrier: "Afirmative Express" }) {
+    receipt { status }
+    errors { __typename message }
+  }
+}
